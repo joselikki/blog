@@ -17,19 +17,36 @@ use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 
 pub type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
-use self::models::Post;
+use self::models::{Post, NewPost, NewPostHandler};
 use self::schema::posts;
-use self::schema::posts::dsl;
+use self::schema::posts::dsl::*;
 
 #[get("/")]
-async fn index(pool: web ::Data<DbPool>) -> impl Responder {
+async fn index(pool: web :: Data <DbPool>) -> impl Responder {
 
     let conn = pool.get().expect("Unable to connect with DB");
 
     match web::block(move || {posts.load::<Post>(&conn)}).await {
-        Ok(data) => HttpResponse::Ok().body("Data Retreived"),
+        Ok(data) => {
+
+            HttpResponse::Ok().body(format!("{:?}", data))
+        } 
+            
         Err(err) => HttpResponse::Ok().body("There was an error retrieving the data")
     }    
+}
+
+#[post("/new_post")]
+async fn new_post(pool: web :: Data <DbPool>, item: web::Json<NewPostHandler>) -> impl Responder {
+    let conn = pool.get().expect("Unable to connect with DB");
+
+    match web::block(move || {Post::create_post(&conn, &item)}).await {
+        Ok(data) => {
+            HttpResponse::Ok().body(format!("{:?}", data))
+        } 
+        Err(err) => HttpResponse::Ok().body("There was an error retrieving the data")
+    }    
+
 }
 
 #[actix_web::main]
@@ -42,7 +59,9 @@ async fn main() -> std::io::Result<()> {
         .expect("Unable to create the connection pool.");
 
     HttpServer::new(move || App::new()
-        .service(index).app_data(pool.clone()))
+        .service(index)
+        .service(new_post)
+        .data(pool.clone()))
         .bind(("127.0.0.1", 8000))
         .unwrap()
         .run()
